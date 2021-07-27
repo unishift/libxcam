@@ -851,17 +851,17 @@ get_cubemap_world_pos(
 
     switch (cube_side) {
     case CubeSideRight:
-        return {1.f, side_u,  side_v};
+        return {1.f, -side_u,  side_v};
     case CubeSideLeft:
         return {-1.f, side_u, side_v};
     case CubeSideUp:
-        return {-side_u, -1.f, side_v};
+        return {side_u, side_v, -1.f};
     case CubeSideDown:
-        return {side_u, 1.f, side_v};
+        return {side_u, -side_v, 1.f};
     case CubeSideFront:
-        return {side_u, side_v, 1.f};
+        return {side_u, 1.f, side_v};
     case CubeSideBack:
-        return {-side_u, side_v, -1.f};
+        return {-side_u, -1.f, side_v};
     default:
         return {0.f, 0.f, 0.f};  // Should not happen
     }
