@@ -326,10 +326,10 @@ create_cubemap_mapper (
     const SmartPtr<Stitcher> &stitcher, const SmartPtr<SVStream> &stitch,
     const SmartPtr<SVStream> &cubemap, SVModule module)
 {
-    BowlModel bowl_model (stitcher->get_bowl_config (), stitch->get_width (), stitch->get_height ());
-    BowlModel::PointMap points;
+    CubeMapModel cubemap_model (stitch->get_width (), stitch->get_height ());
+    CubeMapModel::PointMap points;
 
-    bowl_model.get_cubemap_rect_map (points, cubemap->get_width (), cubemap->get_height ());
+    cubemap_model.get_cubemap_rect_map (points, cubemap->get_width (), cubemap->get_height ());
     SmartPtr<GeoMapper> mapper;
     if (module == SVModuleSoft) {
         mapper = GeoMapper::create_soft_geo_mapper ();

@@ -741,95 +741,6 @@ BowlModel::get_topview_rect_map (
     return true;
 }
 
-enum CubeSide {
-    CubeSideRight = 0,
-    CubeSideLeft,
-    CubeSideUp,
-    CubeSideDown,
-    CubeSideFront,
-    CubeSideBack,
-    CubeSideCount
-};
-
-PointFloat3
-normalize(const PointFloat3& vec)
-{
-    const auto sum_square = sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
-    return {vec.x / sum_square, vec.y / sum_square, vec.z / sum_square};
-}
-
-PointFloat3
-get_cubemap_world_pos(
-    const uint32_t u, const uint32_t v,
-    const uint32_t side_w, const uint32_t side_h)
-{
-    // Get position on cube side
-    const float side_u = 2.f * (float(u % side_w) + 0.5f) / side_w - 1.f;
-    const float side_v = 2.f * (float(v % side_h) + 0.5f) / side_h - 1.f;
-
-    // Get direction
-    const uint32_t pos_u = u / side_w;
-    const uint32_t pos_v = v / side_h;
-
-    const auto cube_side =
-        static_cast<CubeSide>(CubeSideRight + pos_u + pos_v * 3);
-//    XCAM_ASSERT(cube_side < CubeSideCount);
-
-    switch (cube_side) {
-    case CubeSideRight:
-        return {1.f, side_u,  side_v};
-    case CubeSideLeft:
-        return {-1.f, side_u, side_v};
-    case CubeSideUp:
-        return {-side_u, -1.f, side_v};
-    case CubeSideDown:
-        return {side_u, 1.f, side_v};
-    case CubeSideFront:
-        return {side_u, side_v, 1.f};
-    case CubeSideBack:
-        return {-side_u, side_v, -1.f};
-    default:
-        return {0.f, 0.f, 0.f};  // Should not happen
-    }
-}
-
-PointFloat2
-world_to_equirect(const PointFloat3& world_pos, uint32_t width, uint32_t height)
-{
-    const float phi = atan2f(world_pos.x, world_pos.y);
-    const float theta = asinf(world_pos.z);
-
-    return {
-        (phi   / XCAM_PI       + 1.f) * width  / 2.f,
-        (theta / XCAM_PI * 2.f + 1.f) * height / 2.f
-    };
-}
-
-bool
-BowlModel::get_cubemap_rect_map(
-    PointMap &texture_points,
-    uint32_t res_width, uint32_t res_height)
-{
-//    float center_pos_x = res_width / 2.0f;
-//    float center_pos_y = res_height / 2.0f;
-//    float mm_per_pixel_x = length_mm / res_width;
-//    float mm_per_pixel_y = width_mm / res_height;
-
-    texture_points.resize (res_width * res_height);
-
-    for(uint32_t row = 0; row < res_height; row++) {
-        for(uint32_t col = 0; col < res_width; col++) {
-            PointFloat3 world_pos = get_cubemap_world_pos(col, row, res_width / 3, res_height / 2);
-            world_pos = normalize(world_pos);
-
-            PointFloat2 texture_pos = world_to_equirect(world_pos, _bowl_img_width, _bowl_img_height);
-
-            texture_points [res_width * row + col] = texture_pos;
-//            printf("%f, %f\n", texture_pos.x, texture_pos.y);
-        }
-    }
-    return true;
-}
 
 bool
 BowlModel::get_stitch_image_vertex_model (
@@ -898,5 +809,101 @@ BowlModel::get_topview_vertex_model (
     return get_stitch_image_vertex_model (vertices, texture_points, indeices, res_width, res_height, ground_image_height);
 }
 
+CubeMapModel::CubeMapModel (
+    const uint32_t image_width, const uint32_t image_height)
+    : _erp_img_width(image_width)
+    , _erp_img_height(image_height)
+{ }
+
+enum CubeSide {
+    CubeSideRight = 0,
+    CubeSideLeft,
+    CubeSideUp,
+    CubeSideDown,
+    CubeSideFront,
+    CubeSideBack,
+    CubeSideCount
+};
+
+static PointFloat3
+normalize(const PointFloat3& vec)
+{
+    const auto sum_square = sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
+    return {vec.x / sum_square, vec.y / sum_square, vec.z / sum_square};
+}
+
+static PointFloat3
+get_cubemap_world_pos(
+    const uint32_t u, const uint32_t v,
+    const uint32_t side_w, const uint32_t side_h)
+{
+    // Get position on cube side
+    const float side_u = 2.f * (float(u % side_w) + 0.5f) / side_w - 1.f;
+    const float side_v = 2.f * (float(v % side_h) + 0.5f) / side_h - 1.f;
+
+    // Get direction
+    const uint32_t pos_u = u / side_w;
+    const uint32_t pos_v = v / side_h;
+
+    const auto cube_side =
+        static_cast<CubeSide>(CubeSideRight + pos_u + pos_v * 3);
+//    XCAM_ASSERT(cube_side < CubeSideCount);
+
+    switch (cube_side) {
+    case CubeSideRight:
+        return {1.f, side_u,  side_v};
+    case CubeSideLeft:
+        return {-1.f, side_u, side_v};
+    case CubeSideUp:
+        return {-side_u, -1.f, side_v};
+    case CubeSideDown:
+        return {side_u, 1.f, side_v};
+    case CubeSideFront:
+        return {side_u, side_v, 1.f};
+    case CubeSideBack:
+        return {-side_u, side_v, -1.f};
+    default:
+        return {0.f, 0.f, 0.f};  // Should not happen
+    }
+}
+
+PointFloat2
+world_to_erp (const PointFloat3& world_pos, uint32_t width, uint32_t height)
+{
+    const float phi = atan2f(world_pos.x, world_pos.y);
+    const float theta = asinf(world_pos.z);
+
+    return {
+        (phi   / XCAM_PI       + 1.f) * width  / 2.f,
+        (theta / XCAM_PI * 2.f + 1.f) * height / 2.f
+    };
+}
+
+bool
+CubeMapModel::get_cubemap_rect_map(
+    PointMap &texture_points,
+    uint32_t res_width, uint32_t res_height)
+{
+//    float center_pos_x = res_width / 2.0f;
+//    float center_pos_y = res_height / 2.0f;
+//    float mm_per_pixel_x = length_mm / res_width;
+//    float mm_per_pixel_y = width_mm / res_height;
+
+    texture_points.resize (res_width * res_height);
+
+    for(uint32_t row = 0; row < res_height; row++) {
+        for(uint32_t col = 0; col < res_width; col++) {
+            PointFloat3 world_pos = get_cubemap_world_pos(col, row, res_width / 3, res_height / 2);
+            world_pos = normalize(world_pos);
+
+            PointFloat2 texture_pos =
+                world_to_erp(world_pos, _erp_img_width, _erp_img_height);
+
+            texture_points [res_width * row + col] = texture_pos;
+//            printf("%f, %f\n", texture_pos.x, texture_pos.y);
+        }
+    }
+    return true;
+}
 
 }

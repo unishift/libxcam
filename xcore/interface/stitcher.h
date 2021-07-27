@@ -341,11 +341,6 @@ public:
         uint32_t res_width, uint32_t res_height,
         float length_mm = 0.0f, float width_mm = 0.0f);
 
-    bool get_cubemap_rect_map(
-        PointMap &texture_points,
-        uint32_t res_width,
-        uint32_t res_height);
-
     bool get_stitch_image_vertex_model (
         VertexMap &vertices, PointMap &texture_points, IndexVector &indeices,
         uint32_t res_width, uint32_t res_height, float vertex_height);
@@ -363,6 +358,21 @@ private:
     uint32_t          _bowl_img_width, _bowl_img_height;
     float             _max_topview_width_mm;
     float             _max_topview_length_mm;
+};
+
+class CubeMapModel {
+public:
+    typedef std::vector<PointFloat2> PointMap;
+
+public:
+    CubeMapModel (const uint32_t image_width, const uint32_t image_height);
+    bool get_cubemap_rect_map(
+        PointMap &texture_points,
+        uint32_t res_width,
+        uint32_t res_height);
+
+private:
+    uint32_t _erp_img_width, _erp_img_height;
 };
 
 }
