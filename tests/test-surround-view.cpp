@@ -50,11 +50,19 @@ enum SVModule {
     SVModuleVulkan
 };
 
-enum SVOutIdx {
-    IdxStitch    = 0,
-    IdxTopView,
-    IdxCubeMap,  // TODO: Add proper handling of topview + cubemap
-    IdxCount
+struct SVOutConfig {
+    bool save_output = true;
+    uint32_t stitch_index = 0;
+
+    bool save_topview = false;
+    uint32_t topview_index;
+
+    bool save_cubemap = false;
+    uint32_t cubemap_index;
+
+    bool is_save() const {
+        return save_output || save_topview || save_cubemap;
+    }
 };
 
 class SVStream
@@ -357,23 +365,23 @@ static void
 write_image (
     const SmartPtr<Stitcher> &stitcher,
     const SVStreams &ins, const SVStreams &outs,
-    bool save_output, bool save_topview, bool save_cubemap)
+    const SVOutConfig &out_config)
 {
     static uint32_t frame_num = 0;
 
     write_in_image (stitcher, ins, frame_num);
 
-    if (save_output)
-        write_out_image (outs[IdxStitch], frame_num);
+    if (out_config.save_output)
+        write_out_image (outs[out_config.stitch_index], frame_num);
 
-    if (save_topview) {
-        remap_topview_buf (outs[IdxStitch], outs[IdxTopView]);
-        write_out_image (outs[IdxTopView], frame_num);
+    if (out_config.save_topview) {
+        remap_topview_buf (outs[out_config.stitch_index], outs[out_config.topview_index]);
+        write_out_image (outs[out_config.topview_index], frame_num);
     }
 
-    if (save_cubemap) {
-        remap_topview_buf (outs[IdxStitch], outs[IdxCubeMap]);
-        write_out_image (outs[IdxCubeMap], frame_num);
+    if (out_config.save_cubemap) {
+        remap_topview_buf (outs[out_config.stitch_index], outs[out_config.cubemap_index]);
+        write_out_image (outs[out_config.cubemap_index], frame_num);
     }
 
     frame_num++;
@@ -394,7 +402,7 @@ static int
 single_frame (
     const SmartPtr<Stitcher> &stitcher,
     const SVStreams &ins, const SVStreams &outs,
-    bool save_output, bool save_topview, bool save_cubemap, int loop)
+    const SVOutConfig &out_config, int loop)
 {
     for (uint32_t i = 0; i < ins.size (); ++i) {
         CHECK (ins[i]->rewind (), "rewind buffer from file(%s) failed", ins[i]->get_file_name ());
@@ -412,13 +420,13 @@ single_frame (
     while (loop--) {
         XCAM_OBJ_PROFILING_START;
 
-        CHECK (stitcher->stitch_buffers (in_buffers, outs[IdxStitch]->get_buf ()), "stitch buffer failed.");
+        CHECK (stitcher->stitch_buffers (in_buffers, outs[out_config.stitch_index]->get_buf ()), "stitch buffer failed.");
 
         XCAM_OBJ_PROFILING_END ("stitch-buffers", XCAM_OBJ_DUR_FRAME_NUM);
 
-        if (save_output || save_topview) {
+        if (out_config.is_save()) {
             if (stitcher->complete_stitch ()) {
-                write_image (stitcher, ins, outs, save_output, save_topview, save_cubemap);
+                write_image (stitcher, ins, outs, out_config);
             }
         }
 
@@ -434,7 +442,7 @@ static int
 multi_frame (
     const SmartPtr<Stitcher> &stitcher,
     const SVStreams &ins, const SVStreams &outs,
-    bool save_output, bool save_topview, bool save_cubemap, int loop)
+    const SVOutConfig &out_config, int loop)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
 
@@ -461,14 +469,14 @@ multi_frame (
             XCAM_OBJ_PROFILING_START;
 
             CHECK (
-                stitcher->stitch_buffers (in_buffers, outs[IdxStitch]->get_buf ()),
+                stitcher->stitch_buffers (in_buffers, outs[out_config.stitch_index]->get_buf ()),
                 "stitch buffer failed.");
 
             XCAM_OBJ_PROFILING_END ("stitch-buffers", XCAM_OBJ_DUR_FRAME_NUM);
 
-            if (save_output || save_topview) {
+            if (out_config.is_save()) {
                 if (stitcher->complete_stitch ()) {
-                    write_image (stitcher, ins, outs, save_output, save_topview, save_cubemap);
+                    write_image (stitcher, ins, outs, out_config);
                 }
             }
 
@@ -485,7 +493,7 @@ static int
 run_stitcher (
     const SmartPtr<Stitcher> &stitcher,
     const SVStreams &ins, const SVStreams &outs,
-    FrameMode frame_mode, bool save_output, bool save_topview, bool save_cubemap, int loop)
+    FrameMode frame_mode, const SVOutConfig &out_config, int loop)
 {
     XCAM_OBJ_PROFILING_INIT;
 
@@ -494,9 +502,9 @@ run_stitcher (
 
     int ret = -1;
     if (frame_mode == FrameSingle)
-        ret = single_frame (stitcher, ins, outs, save_output, save_topview, save_cubemap, loop);
+        ret = single_frame (stitcher, ins, outs, out_config, loop);
     else if (frame_mode == FrameMulti)
-        ret = multi_frame (stitcher, ins, outs, save_output, save_topview, save_cubemap, loop);
+        ret = multi_frame (stitcher, ins, outs, out_config, loop);
     else
         XCAM_LOG_ERROR ("invalid frame mode: %d", frame_mode);
 
@@ -581,9 +589,7 @@ int main (int argc, char *argv[])
 
     int loop = 1;
     int repeat = 1;
-    bool save_output = true;
-    bool save_topview = false;
-    bool save_cubemap = false;
+    SVOutConfig out_config;
 
     const struct option long_opts[] = {
         {"module", required_argument, NULL, 'm'},
@@ -798,13 +804,13 @@ int main (int argc, char *argv[])
             }
             break;
         case 's':
-            save_output = (strcasecmp (optarg, "false") == 0 ? false : true);
+            out_config.save_output = (strcasecmp (optarg, "false") == 0 ? false : true);
             break;
         case 't':
-            save_topview = (strcasecmp (optarg, "false") == 0 ? false : true);
+            out_config.save_topview = (strcasecmp (optarg, "false") == 0 ? false : true);
             break;
         case 'q':
-            save_cubemap = (strcasecmp (optarg, "false") == 0 ? false : true);
+            out_config.save_cubemap = (strcasecmp (optarg, "false") == 0 ? false : true);
             break;
         case 'L':
             loop = atoi(optarg);
@@ -839,8 +845,8 @@ int main (int argc, char *argv[])
         CHECK_EXP (strlen (ins[i]->get_file_name ()), "input file name was not set, index:%d", i);
     }
 
-    CHECK_EXP (outs.size () == 1 && outs[IdxStitch].ptr (), "surrond view needs 1 output stream");
-    CHECK_EXP (strlen (outs[IdxStitch]->get_file_name ()), "output file name was not set");
+    CHECK_EXP (outs.size () == 1 && outs[out_config.stitch_index].ptr (), "surrond view needs 1 output stream");
+    CHECK_EXP (strlen (outs[out_config.stitch_index]->get_file_name ()), "output file name was not set");
 
     for (uint32_t i = 0; i < ins.size (); ++i) {
         printf ("input%d file:\t\t%s\n", i, ins[i]->get_file_name ());
@@ -851,7 +857,7 @@ int main (int argc, char *argv[])
     printf ("stitch module:\t\t%s\n", module == SVModuleGLES ? "GLES" :
             (module == SVModuleVulkan ? "Vulkan" : (module == SVModuleSoft ? "Soft" : "Unknown")));
     printf ("device node:\t\t%s\n", device_node != NULL ? device_node : "Not specified, use default model");
-    printf ("output file:\t\t%s\n", outs[IdxStitch]->get_file_name ());
+    printf ("output file:\t\t%s\n", outs[out_config.stitch_index]->get_file_name ());
     printf ("input width:\t\t%d\n", input_width);
     printf ("input height:\t\t%d\n", input_height);
     printf ("output width:\t\t%d\n", output_width);
@@ -875,9 +881,9 @@ int main (int argc, char *argv[])
             ((fm_status == FMStatusHalfWay) ? "halfway" : "fmfirst"));
 #endif
     printf ("frame mode:\t\t%s\n", (frame_mode == FrameSingle) ? "singleframe" : "multiframe");
-    printf ("save output:\t\t%s\n", save_output ? "true" : "false");
-    printf ("save topview:\t\t%s\n", save_topview ? "true" : "false");
-    printf ("save cubemap:\t\t%s\n", save_cubemap ? "true" : "false");
+    printf ("save output:\t\t%s\n", out_config.save_output ? "true" : "false");
+    printf ("save topview:\t\t%s\n", out_config.save_topview ? "true" : "false");
+    printf ("save cubemap:\t\t%s\n", out_config.save_cubemap ? "true" : "false");
     printf ("loop count:\t\t%d\n", loop);
     printf ("repeat count:\t\t%d\n", repeat);
 
@@ -955,18 +961,18 @@ int main (int argc, char *argv[])
         CHECK (ins[i]->open_reader ("rb"), "open input file(%s) failed", ins[i]->get_file_name ());
     }
 
-    outs[IdxStitch]->set_buf_size (output_width, output_height);
-    if (save_output) {
-        CHECK (outs[IdxStitch]->estimate_file_format (),
-               "%s: estimate file format failed", outs[IdxStitch]->get_file_name ());
-        CHECK (outs[IdxStitch]->open_writer ("wb"), "open output file(%s) failed", outs[IdxStitch]->get_file_name ());
+    outs[out_config.stitch_index]->set_buf_size (output_width, output_height);
+    if (out_config.save_output) {
+        CHECK (outs[out_config.stitch_index]->estimate_file_format (),
+               "%s: estimate file format failed", outs[out_config.stitch_index]->get_file_name ());
+        CHECK (outs[out_config.stitch_index]->open_writer ("wb"), "open output file(%s) failed", outs[out_config.stitch_index]->get_file_name ());
     }
 
     while (repeat--) {
 
         XCAM_LOG_DEBUG ("create stitcher and run test, remain repeat %d times", repeat);
 
-        SmartPtr<Stitcher> stitcher = create_stitcher (outs[IdxStitch], module);
+        SmartPtr<Stitcher> stitcher = create_stitcher (outs[out_config.stitch_index], module);
         XCAM_ASSERT (stitcher.ptr ());
 
         stitcher->set_camera_num (fisheye_num);
@@ -1019,29 +1025,35 @@ int main (int argc, char *argv[])
             stitcher->set_bowl_config (bowl_config (cam_model));
         }
 
-        if (save_topview) {
+        if (out_config.save_topview) {
+            const uint32_t prev_out_size = outs.size();
             add_stream (outs, "topview", topview_width, topview_height);
-//            XCAM_ASSERT (outs.size () >= IdxCount);
+            XCAM_ASSERT (outs.size() == prev_out_size + 1);
 
-            CHECK (outs[IdxTopView]->estimate_file_format (),
-                   "%s: estimate file format failed", outs[IdxTopView]->get_file_name ());
-            CHECK (outs[IdxTopView]->open_writer ("wb"), "open output file(%s) failed", outs[IdxTopView]->get_file_name ());
+            out_config.topview_index = outs.size() - 1;
 
-            create_topview_mapper (stitcher, outs[IdxStitch], outs[IdxTopView], module);
+            CHECK (outs[out_config.topview_index]->estimate_file_format (),
+                   "%s: estimate file format failed", outs[out_config.topview_index]->get_file_name ());
+            CHECK (outs[out_config.topview_index]->open_writer ("wb"), "open output file(%s) failed", outs[out_config.topview_index]->get_file_name ());
+
+            create_topview_mapper (stitcher, outs[out_config.stitch_index], outs[out_config.topview_index], module);
         }
 
-        if (save_cubemap) {
+        if (out_config.save_cubemap) {
+            const uint32_t prev_out_size = outs.size();
             add_stream (outs, "cubemap", cubemap_width, cubemap_height);
-            XCAM_ASSERT (outs.size () >= IdxCount);
+            XCAM_ASSERT (outs.size() == prev_out_size + 1);
 
-            CHECK (outs[IdxCubeMap]->estimate_file_format (),
-                   "%s: estimate file format failed", outs[IdxCubeMap]->get_file_name ());
-            CHECK (outs[IdxCubeMap]->open_writer ("wb"), "open output file(%s) failed", outs[IdxCubeMap]->get_file_name ());
+            out_config.cubemap_index = outs.size() - 1;
 
-            create_cubemap_mapper (stitcher, outs[IdxStitch], outs[IdxCubeMap], module);
+            CHECK (outs[out_config.cubemap_index]->estimate_file_format (),
+                   "%s: estimate file format failed", outs[out_config.cubemap_index]->get_file_name ());
+            CHECK (outs[out_config.cubemap_index]->open_writer ("wb"), "open output file(%s) failed", outs[out_config.cubemap_index]->get_file_name ());
+
+            create_cubemap_mapper (stitcher, outs[out_config.stitch_index], outs[out_config.cubemap_index], module);
         }
         CHECK_EXP (
-            run_stitcher (stitcher, ins, outs, frame_mode, save_output, save_topview, save_cubemap, loop) == 0,
+            run_stitcher (stitcher, ins, outs, frame_mode, out_config, loop) == 0,
             "run stitcher failed");
     }
 
