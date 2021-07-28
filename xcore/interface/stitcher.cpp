@@ -891,11 +891,6 @@ CubeMapModel::get_cubemap_rect_map(
     PointMap &texture_points,
     uint32_t res_width, uint32_t res_height)
 {
-//    float center_pos_x = res_width / 2.0f;
-//    float center_pos_y = res_height / 2.0f;
-//    float mm_per_pixel_x = length_mm / res_width;
-//    float mm_per_pixel_y = width_mm / res_height;
-
     texture_points.resize (res_width * res_height);
 
     for(uint32_t row = 0; row < res_height; row++) {
@@ -907,7 +902,6 @@ CubeMapModel::get_cubemap_rect_map(
                 world_to_erp(world_pos, _erp_img_width, _erp_img_height);
 
             texture_points [res_width * row + col] = texture_pos;
-//            printf("%f, %f\n", texture_pos.x, texture_pos.y);
         }
     }
     return true;
