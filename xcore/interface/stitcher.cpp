@@ -835,19 +835,28 @@ normalize(const PointFloat3& vec)
 static PointFloat3
 get_cubemap_world_pos(
     const uint32_t u, const uint32_t v,
-    const uint32_t side_w, const uint32_t side_h)
+    const uint32_t cubemap_width, const uint32_t cubemap_height)
 {
-    // Get position on cube side
-    const float side_u = 2.f * (float(u % side_w) + 0.5f) / side_w - 1.f;
-    const float side_v = 2.f * (float(v % side_h) + 0.5f) / side_h - 1.f;
+    // Side size can be non-integer in case of non 3:2 aspect ratio
+    const float side_width  = float(cubemap_width ) / 3.f;
+    const float side_height = float(cubemap_height) / 2.f;
 
     // Get direction
-    const uint32_t pos_u = u / side_w;
-    const uint32_t pos_v = v / side_h;
-
+    const uint32_t pos_u = floorf(float(u) / side_width);
+    const uint32_t pos_v = floorf(float(v) / side_height);
     const auto cube_side =
         static_cast<CubeSide>(CubeSideRight + pos_u + pos_v * 3);
-//    XCAM_ASSERT(cube_side < CubeSideCount);
+    XCAM_ASSERT(cube_side < CubeSideCount);
+
+    // Calculate side position
+    const int side_left   = ceilf(side_width  * pos_u);
+    const int side_right  = ceilf(side_width  * (pos_u + 1));
+    const int side_top    = ceilf(side_height * pos_v);
+    const int side_bottom = ceilf(side_height * (pos_v + 1));
+
+    // Get position on cube side
+    const float side_u = 2.f * (float(u - side_left) + 0.5f) / (side_right  - side_left) - 1.f;
+    const float side_v = 2.f * (float(v - side_top ) + 0.5f) / (side_bottom - side_top ) - 1.f;
 
     switch (cube_side) {
     case CubeSideRight:
@@ -862,12 +871,10 @@ get_cubemap_world_pos(
         return {side_u, 1.f, side_v};
     case CubeSideBack:
         return {-side_u, -1.f, side_v};
-    default:
-        return {0.f, 0.f, 0.f};  // Should not happen
     }
 }
 
-PointFloat2
+static PointFloat2
 world_to_erp (const PointFloat3& world_pos, uint32_t width, uint32_t height)
 {
     const float phi = atan2f(world_pos.x, world_pos.y);
@@ -893,7 +900,7 @@ CubeMapModel::get_cubemap_rect_map(
 
     for(uint32_t row = 0; row < res_height; row++) {
         for(uint32_t col = 0; col < res_width; col++) {
-            PointFloat3 world_pos = get_cubemap_world_pos(col, row, res_width / 3, res_height / 2);
+            PointFloat3 world_pos = get_cubemap_world_pos(col, row, res_width, res_height);
             world_pos = normalize(world_pos);
 
             PointFloat2 texture_pos =
