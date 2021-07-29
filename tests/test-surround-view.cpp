@@ -922,8 +922,8 @@ int main (int argc, char *argv[])
         for (uint32_t i = 0; i < ins.size (); ++i) {
             ins[i]->set_vk_device (vk_dev);
         }
-        XCAM_ASSERT (outs[IdxStitch].ptr ());
-        outs[IdxStitch]->set_vk_device (vk_dev);
+        XCAM_ASSERT (outs[out_config.stitch_index].ptr ());
+        outs[out_config.stitch_index]->set_vk_device (vk_dev);
 #else
         XCAM_LOG_ERROR ("vulkan module is unsupported");
         return -1;
